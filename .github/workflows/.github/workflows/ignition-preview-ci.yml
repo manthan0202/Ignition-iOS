@@ -1,0 +1,75 @@
+
+name: Ignition Preview - Xcode Build and Smoke Test
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 35
+
+    env:
+      DERIVED_DATA: ${{ runner.temp }}/ignition-build
+      CI_ARTIFACTS: ${{ runner.temp }}/ignition-results
+
+    steps:
+      - name: Download repository
+        uses: actions/checkout@v4
+
+      - name: Find the Xcode project
+        shell: bash
+        run: |
+          if [ -d Ignition.xcodeproj ]; then
+            echo "IGNITION_DIR=." >> "$GITHUB_ENV"
+          elif [ -d Ignition/Ignition.xcodeproj ]; then
+            echo "IGNITION_DIR=Ignition" >> "$GITHUB_ENV"
+          else
+            echo "Could not find Ignition.xcodeproj"
+            find . -maxdepth 3 -name '*.xcodeproj' -print
+            exit 1
+          fi
+          mkdir -p "$CI_ARTIFACTS"
+
+      - name: Run existing source tests
+        working-directory: ${{ env.IGNITION_DIR }}
+        shell: bash
+        run: |
+          set -o pipefail
+          bash Scripts/verify_revision.sh 2>&1 | tee "$CI_ARTIFACTS/source-tests.log"
+
+      - name: Compile the iPhone Simulator Preview app
+        working-directory: ${{ env.IGNITION_DIR }}
+        shell: bash
+        run: |
+          set -o pipefail
+          xcodebuild \
+            -project Ignition.xcodeproj \
+            -scheme Ignition-Preview \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$DERIVED_DATA" \
+            CODE_SIGNING_ALLOWED=NO \
+            build 2>&1 | tee "$CI_ARTIFACTS/xcodebuild.log"
+
+      - name: Launch Preview in the iPhone Simulator
+        working-directory: ${{ env.IGNITION_DIR }}
+        shell: bash
+        run: |
+          set -o pipefail
+          bash Scripts/ci_smoke_preview.sh 2>&1 | tee "$CI_ARTIFACTS/simulator.log"
+
+      - name: Save build logs and screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ignition-preview-${{ github.run_number }}
+          path: ${{ runner.temp }}/ignition-results/
+          if-no-files-found: warn
+          retention-days: 14
