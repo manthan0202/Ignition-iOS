@@ -1,0 +1,22 @@
+PASS: 22 Plan functional/visual gates; no duplicate controls; adaptive time and event cards
+PASS: project IDs, compiled Swift membership for both app schemes, artwork, Info.plist, widgets
+Parsing all Swift sources...
+Compiling Foundation session tests...
+PASS: timestamp-based countdown, pause/resume, persistence, single footprint, reconciled elapsed time, honest outcome
+Running expanded deterministic stress suite...
+PASS: 28 assertions: expiry, background reload, skipped review, idempotency, pause, break, invalid transitions, emergency, corrupt data
+Testing Living Day viewport regression (empty day, pan, zoom, midnight)...
+PASS: 732 Journey viewport assertions: empty day, future/past, drag, midnight, zoom
+NOTICE: iOS APIs cannot be typechecked or run without Xcode and Apple SDK.
+Focus block checks passed: 109
+PASS: focus block session identity, restart, expiry, no false completion, legacy decode
+PASS: full & preview use identical Live Activity UI; completion sends updated tasks
+Live Activity Codable migration and 3000 state roundtrips passed
+PASS: 5009 Now drawer geometry assertions
+PASS: design tokens, motion/haptics, accessibility, drawer transition, app icon, widget contents, approved artwork reference
+PASS: project IDs, compiled Swift membership for both app schemes, artwork, Info.plist, widgets
+Ignition.xcodeproj/project.pbxproj: OK
+NOTE: Real Xcode typechecking and iPhone frame pacing remain UNVERIFIED here.
+
+PASS: all local Plan, app-core and project-structure checks
+UNVERIFIED HERE: Xcode compile, live event sync, iPhone gestures and frame timing

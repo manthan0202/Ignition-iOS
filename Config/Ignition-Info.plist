@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>$(EXECUTABLE_NAME)</string>
+	<key>CFBundleIdentifier</key>
+	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>$(PRODUCT_NAME)</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
+	<key>CFBundleVersion</key>
+	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>CFBundleDisplayName</key>
+	<string>Ignition</string>
+	<key>LSRequiresIPhoneOS</key>
+	<true/>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Ignition shows events and lets you schedule your work.</string>
+	<!-- Optional direct Google integration: replace this empty ID and register its reversed URL scheme first. -->
+	<key>IgnitionGoogleOAuthClientID</key>
+	<string></string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Ignition transcribes spoken tasks and events only when you ask.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Ignition uses your microphone only while you dictate a task or event.</string>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>audio</string>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>Ignition</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ignition</string>
+			</array>
+		</dict>
+	</array>
+	<key>UISupportedInterfaceOrientations</key>
+	<array>
+		<string>UIInterfaceOrientationPortrait</string>
+	</array>
+</dict>
+</plist>

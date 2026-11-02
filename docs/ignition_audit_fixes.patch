@@ -1,0 +1,317 @@
+diff -ru new/Ignition/Sources/App/AppModel.swift newfixed/Sources/App/AppModel.swift
+--- new/Ignition/Sources/App/AppModel.swift	2026-10-31 04:03:26.000000000 +0000
++++ newfixed/Sources/App/AppModel.swift	2026-11-01 02:13:23.605865915 +0000
+@@ -228,6 +228,15 @@
+     }
+     private var startingSession = false
+     @Published private(set) var isStartingFocus = false
++
++    /// The completion alert is how the person is pulled back when the timer ends. Permission used to be
++    /// requested only from a Settings button, so most people never granted it. Ask once, at the first lock-in.
++    private func requestNotificationsOnce() async {
++        let key = "ignition.askedNotificationPermission"
++        guard !UserDefaults.standard.bool(forKey: key) else { return }
++        UserDefaults.standard.set(true, forKey: key)
++        _ = await notices.authorize()
++    }
+     func lockIn(minutes: Int? = nil, small: Bool = false, blockID: UUID? = nil) async {
+         guard !startingSession else { return }
+         startingSession = true
+@@ -240,6 +249,7 @@
+             if existing.phase == .paused || existing.phase == .onBreak { await resume(); return }
+             if existing.phase == .active { showFocus = true; return }
+         }
++        await requestNotificationsOnce()
+         // A block is a time reservation with multiple tasks. Never mark the
+         // first task complete simply because the block focus timer ended.
+         let block = work.block(blockID ?? selectedBlockID)
+@@ -333,9 +343,10 @@
+             session = paused
+             notices.cancelCompletion()
+             notices.scheduleBreakReminder(after: 300)
+-            // A break keeps the shield for five minutes only, not indefinitely.
+-            // When the break lease ends, the user remains paused until Resume.
+-            _ = protection.activate(sessionID: paused.id, duration: 300)
++            // Do NOT call protection.activate here. A 5-minute schedule is below the 16-minute safe-release
++            // minimum, and activate() always starts with deactivate(), so doing so removed the shield.
++            // ProtectionService.reconcile() keeps an unexpired lease through .onBreak; the existing
++            // release backstop still ends it at the original lease expiry.
+             await refresh()
+         } catch { errorMessage = error.localizedDescription }
+     }
+diff -ru new/Ignition/Sources/App/FocusAudioPlayer.swift newfixed/Sources/App/FocusAudioPlayer.swift
+--- new/Ignition/Sources/App/FocusAudioPlayer.swift	2026-10-30 16:51:22.000000000 +0000
++++ newfixed/Sources/App/FocusAudioPlayer.swift	2026-11-01 16:53:21.189521259 +0000
+@@ -8,7 +8,62 @@
+     @Published var volume: Float = 0.35
+     @Published var errorMessage: String?
+     private var player: AVAudioPlayer?
++    private var resumeAfterInterruption = false
++    private var suspendedForDictation = false
++    private var observers: [NSObjectProtocol] = []
+     let tracks = ["Silence", "Original Piano", "Soft Rain", "Brown Noise"]
++
++    init() {
++        let center = NotificationCenter.default
++        observers.append(center.addObserver(forName: AVAudioSession.interruptionNotification, object: nil, queue: .main,
++                                            using: Self.interruptionHandler(owner: self)))
++        observers.append(center.addObserver(forName: AVAudioSession.routeChangeNotification, object: nil, queue: .main,
++                                            using: Self.routeHandler(owner: self)))
++    }
++
++    // Handlers are built in nonisolated factories so they do not inherit main-actor isolation.
++    private nonisolated static func interruptionHandler(owner: FocusAudioPlayer) -> @Sendable (Notification) -> Void {
++        return { [weak owner] note in
++            let typeRaw = note.userInfo?[AVAudioSessionInterruptionTypeKey] as? UInt
++            let optionRaw = note.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt
++            Task { @MainActor in owner?.handleInterruption(typeRaw: typeRaw, optionRaw: optionRaw) }
++        }
++    }
++    private nonisolated static func routeHandler(owner: FocusAudioPlayer) -> @Sendable (Notification) -> Void {
++        return { [weak owner] note in
++            let reasonRaw = note.userInfo?[AVAudioSessionRouteChangeReasonKey] as? UInt
++            Task { @MainActor in owner?.handleRouteChange(reasonRaw: reasonRaw) }
++        }
++    }
++
++    private func handleInterruption(typeRaw: UInt?, optionRaw: UInt?) {
++        guard let typeRaw, let type = AVAudioSession.InterruptionType(rawValue: typeRaw) else { return }
++        switch type {
++        case .began:
++            resumeAfterInterruption = isPlaying
++            player?.pause()
++            isPlaying = false
++        case .ended:
++            let options = AVAudioSession.InterruptionOptions(rawValue: optionRaw ?? 0)
++            if resumeAfterInterruption, options.contains(.shouldResume) {
++                try? AVAudioSession.sharedInstance().setActive(true)
++                isPlaying = player?.play() ?? false
++            }
++            resumeAfterInterruption = false
++        @unknown default:
++            break
++        }
++    }
++
++    private func handleRouteChange(reasonRaw: UInt?) {
++        guard let reasonRaw, let reason = AVAudioSession.RouteChangeReason(rawValue: reasonRaw) else { return }
++        // Headphones unplugged: pause instead of suddenly playing through the speaker.
++        if reason == .oldDeviceUnavailable, isPlaying {
++            player?.pause()
++            isPlaying = false
++        }
++    }
++
+     func play(_ name: String) {
+         stop()
+         selection = name
+@@ -28,6 +83,22 @@
+             isPlaying = player?.play() ?? false
+         } catch { errorMessage = error.localizedDescription }
+     }
+-    func stop() { player?.stop(); player = nil; isPlaying = false }
++    func stop() { player?.stop(); player = nil; isPlaying = false; resumeAfterInterruption = false; suspendedForDictation = false }
+     func updateVolume(_ level: Float) { volume = level; player?.volume = level }
++
++    /// Dictation switches the shared audio session to record; park music first and bring it back afterwards.
++    func suspendForDictation() {
++        suspendedForDictation = isPlaying
++        player?.pause()
++        isPlaying = false
++    }
++    func resumeAfterDictation() {
++        guard suspendedForDictation else { return }
++        suspendedForDictation = false
++        do {
++            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default, options: [.mixWithOthers])
++            try AVAudioSession.sharedInstance().setActive(true)
++            isPlaying = player?.play() ?? false
++        } catch { errorMessage = error.localizedDescription }
++    }
+ }
+diff -ru new/Ignition/Sources/App/PlanView.swift newfixed/Sources/App/PlanView.swift
+--- new/Ignition/Sources/App/PlanView.swift	2026-10-31 14:40:12.000000000 +0000
++++ newfixed/Sources/App/PlanView.swift	2026-11-01 16:53:21.205649330 +0000
+@@ -1211,6 +1211,7 @@
+                 }
+             }
+         }
++        .onAppear { voice.player = model.audio }
+         .onDisappear { voice.discardAudio() }
+     }
+ }
+diff -ru new/Ignition/Sources/App/SettingsView.swift newfixed/Sources/App/SettingsView.swift
+--- new/Ignition/Sources/App/SettingsView.swift	2026-10-31 04:17:06.000000000 +0000
++++ newfixed/Sources/App/SettingsView.swift	2026-11-01 16:53:21.206539729 +0000
+@@ -30,6 +30,7 @@
+                     #else
+                     Button("Authorize Screen Time") { Task { _ = await model.protection.authorize() } }
+                     Button("Choose distracting apps and websites") { showPicker = true }
++                    Button("Release Ignition shields now", role: .destructive) { model.protection.deactivate() }
+                     #endif
+                     Text("Without permission or a selection, Ignition runs as a timer only. Sessions under 16 minutes are timer-only because safe automatic unblocking cannot be guaranteed with Apple's 15-minute monitoring minimum. Ignition shields selected apps; it cannot force-quit them.")
+                         .font(.footnote).foregroundStyle(.secondary)
+diff -ru new/Ignition/Sources/App/VoiceCapture.swift newfixed/Sources/App/VoiceCapture.swift
+--- new/Ignition/Sources/App/VoiceCapture.swift	2026-10-31 00:57:50.000000000 +0000
++++ newfixed/Sources/App/VoiceCapture.swift	2026-11-01 16:53:21.182729565 +0000
+@@ -21,6 +21,52 @@
+     private var generation = 0
+     private var completion: CheckedContinuation<String, Never>?
+     private var fallbackTask: Task<Void, Never>?
++    /// Text that existed before this recording (typed, or an earlier dictation). A new recording appends to it
++    /// instead of silently erasing it.
++    private var baseText = ""
++    /// Focus music is parked while the audio session is in record mode, then restored. Set by the owning view.
++    weak var player: FocusAudioPlayer?
++
++    // MARK: Nonisolated helpers
++    // Closures created inside a @MainActor method inherit main-actor isolation. These callbacks are invoked
++    // by the system on real-time audio / arbitrary queues, which is a known crash class on recent toolchains.
++    // Building them in nonisolated statics keeps them off the main actor and hops back explicitly.
++    private nonisolated static func speechAuthorization() async -> SFSpeechRecognizerAuthorizationStatus {
++        await withCheckedContinuation { continuation in
++            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
++        }
++    }
++    private nonisolated static func microphonePermission() async -> Bool {
++        await AVAudioApplication.requestRecordPermission()
++    }
++    private nonisolated static func installTap(on node: AVAudioInputNode, format: AVAudioFormat,
++                                               request: SFSpeechAudioBufferRecognitionRequest) {
++        node.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
++            request.append(buffer)
++        }
++    }
++    private nonisolated static func resultHandler(owner: VoiceCapture, generation: Int)
++        -> @Sendable (SFSpeechRecognitionResult?, Error?) -> Void {
++        return { [weak owner] result, error in
++            let text = result?.bestTranscription.formattedString
++            let isFinal = result?.isFinal ?? false
++            let message = error?.localizedDescription
++            Task { @MainActor in
++                owner?.handleResult(generation: generation, text: text, isFinal: isFinal, errorMessage: message)
++            }
++        }
++    }
++    private func handleResult(generation gen: Int, text: String?, isFinal: Bool, errorMessage: String?) {
++        guard gen == generation else { return }
++        if let text, !text.isEmpty {
++            transcript = baseText.isEmpty ? text : baseText + " " + text
++        }
++        if finalizing && (isFinal || errorMessage != nil) {
++            finishRecognition()
++        } else if let errorMessage, !finalizing {
++            errorText = errorMessage
++        }
++    }
+ 
+     func begin() async {
+         guard !recording && !finalizing else { return }
+@@ -28,45 +74,37 @@
+             errorText = "Speech recognition is unavailable. You can type instead."
+             return
+         }
+-        let authorization = await withCheckedContinuation { (continuation: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+-            SFSpeechRecognizer.requestAuthorization { continuation.resume(returning: $0) }
+-        }
++        let authorization = await Self.speechAuthorization()
+         guard authorization == .authorized else { errorText = "Speech permission denied. You can type instead."; return }
+-        let microphone = await withCheckedContinuation { (continuation: CheckedContinuation<Bool, Never>) in
+-            AVAudioSession.sharedInstance().requestRecordPermission { continuation.resume(returning: $0) }
+-        }
++        let microphone = await Self.microphonePermission()
+         guard microphone else { errorText = "Microphone permission denied. You can type instead."; return }
+         do {
+             errorText = nil
+-            transcript = ""
++            baseText = transcript.trimmingCharacters(in: .whitespacesAndNewlines)
+             generation += 1
+             let activeGeneration = generation
++            player?.suspendForDictation()
+             try AVAudioSession.sharedInstance().setCategory(.record, mode: .measurement, options: .duckOthers)
+-            try AVAudioSession.sharedInstance().setActive(true)
++            try AVAudioSession.sharedInstance().setActive(true, options: .notifyOthersOnDeactivation)
+             let inputRequest = SFSpeechAudioBufferRecognitionRequest()
+             inputRequest.shouldReportPartialResults = true
++            // Prefer on-device recognition when the OS supports it; the audio then never leaves the phone.
++            if recognizer.supportsOnDeviceRecognition { inputRequest.requiresOnDeviceRecognition = true }
+             request = inputRequest
+             let input = audio.inputNode
+             if tapInstalled { input.removeTap(onBus: 0); tapInstalled = false }
+-            input.installTap(onBus: 0, bufferSize: 1024, format: input.outputFormat(forBus: 0)) { [weak inputRequest] buffer, _ in
+-                inputRequest?.append(buffer)
++            let format = input.outputFormat(forBus: 0)
++            // A zero sample rate (no input hardware) makes installTap assert instead of throw.
++            guard format.sampleRate > 0, format.channelCount > 0 else {
++                throw NSError(domain: "IgnitionVoice", code: 1,
++                              userInfo: [NSLocalizedDescriptionKey: "No microphone input is available. You can type instead."])
+             }
++            Self.installTap(on: input, format: format, request: inputRequest)
+             tapInstalled = true
+             audio.prepare()
+             try audio.start()
+-            recognition = recognizer.recognitionTask(with: inputRequest) { [weak self] result, error in
+-                Task { @MainActor in
+-                    guard let self, activeGeneration == self.generation else { return }
+-                    if let text = result?.bestTranscription.formattedString, !text.isEmpty {
+-                        self.transcript = text
+-                    }
+-                    if self.finalizing && (result?.isFinal == true || error != nil) {
+-                        self.finishRecognition()
+-                    } else if let error, !self.finalizing {
+-                        self.errorText = error.localizedDescription
+-                    }
+-                }
+-            }
++            recognition = recognizer.recognitionTask(with: inputRequest,
++                resultHandler: Self.resultHandler(owner: self, generation: activeGeneration))
+             recording = true
+         } catch {
+             errorText = error.localizedDescription
+@@ -105,7 +143,8 @@
+         recognition?.cancel()
+         recognition = nil
+         request = nil
+-        try? AVAudioSession.sharedInstance().setActive(false)
++        try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
++        player?.resumeAfterDictation()
+         finalizing = false
+         let result = transcript
+         let waiting = completion
+diff -ru new/Ignition/Sources/App/VoiceDraftParser.swift newfixed/Sources/App/VoiceDraftParser.swift
+--- new/Ignition/Sources/App/VoiceDraftParser.swift	2026-10-31 14:59:50.000000000 +0000
++++ newfixed/Sources/App/VoiceDraftParser.swift	2026-11-01 16:53:04.167471337 +0000
+@@ -98,10 +98,17 @@
+             if date == nil { date = dayStart }
+             date = date.flatMap { calendar.date(bySettingHour: hour, minute: minute, second: 0, of: $0) }
+             title = replaceMatch(range, in: title)
+-        } else if let (_, range) = match("\\bat\\s+(\\d{1,2})\\b", in: title) {
+-            // Don't guess AM/PM. The draft explicitly requests clarification.
++        } else if let (hitText, range) = match("\\bat\\s+(\\d{1,2})\\b", in: title) {
++            // AM/PM was not spoken: the draft stays flagged for confirmation. But it must still carry the hour
++            // the person SAID. It used to drop it and default to 12:00 AM. Everyday heuristic for the pre-fill
++            // only: 1-6 afternoon, 7-11 morning, 12 noon, 13-23 as a 24-hour time.
+             needsTimeConfirmation = true
++            let spoken = Int(hitText.filter { $0.isNumber }) ?? 0
++            let hour24 = (1...6).contains(spoken) ? spoken + 12 : spoken
+             if date == nil { date = dayStart }
++            if (1...23).contains(spoken) {
++                date = date.flatMap { calendar.date(bySettingHour: hour24, minute: 0, second: 0, of: $0) }
++            }
+             title = replaceMatch(range, in: title)
+         }
+         // "for tomorrow 5 PM" should not leave the preposition "for" in the title.
+diff -ru new/Ignition/Tests/VoiceDraftParserTests.swift newfixed/Tests/VoiceDraftParserTests.swift
+--- new/Ignition/Tests/VoiceDraftParserTests.swift	2026-10-31 14:59:50.000000000 +0000
++++ newfixed/Tests/VoiceDraftParserTests.swift	2026-11-01 16:53:04.167921515 +0000
+@@ -13,6 +13,10 @@
+         precondition(spoken.title == "research" && spoken.start != nil && spoken.durationMinutes == 60)
+         let d = VoiceDraftParser.parse("Schedule write paper tomorrow at 7", now: now)
+         precondition(d.needsTimeConfirmation)
++        // The spoken hour must survive (it used to default to midnight).
++        precondition(d.start != nil && Calendar.current.component(.hour, from: d.start!) == 7)
++        let e = VoiceDraftParser.parse("Schedule review tomorrow at 5", now: now)
++        precondition(e.needsTimeConfirmation && e.start != nil && Calendar.current.component(.hour, from: e.start!) == 17)
+         let spokenRequest = VoiceDraftParser.parse("Can you add cardiology to my schedule for tomorrow 5 PM", now: now)
+         precondition(spokenRequest.kind == .event && spokenRequest.title.lowercased() == "cardiology")
+         precondition(spokenRequest.start != nil && Calendar.current.component(.hour, from: spokenRequest.start!) == 17)

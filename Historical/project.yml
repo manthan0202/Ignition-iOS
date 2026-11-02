@@ -1,0 +1,125 @@
+name: Ignition
+options:
+  bundleIdPrefix: com.example.ignition
+  deploymentTarget:
+    iOS: '17.4'
+settings:
+  base:
+    SWIFT_VERSION: '5.0'
+    IPHONEOS_DEPLOYMENT_TARGET: '17.4'
+    TARGETED_DEVICE_FAMILY: '1'
+    CODE_SIGN_STYLE: Automatic
+    GENERATE_INFOPLIST_FILE: YES
+    ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS: NO
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+targets:
+  Ignition:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources/App
+      - path: Sources/Shared
+      - path: Assets
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.ignition
+        INFOPLIST_KEY_CFBundleDisplayName: Ignition
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
+        INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription: Ignition shows your calendar and lets you schedule your work.
+        INFOPLIST_KEY_NSSpeechRecognitionUsageDescription: Ignition transcribes spoken tasks and events on request.
+        INFOPLIST_KEY_NSMicrophoneUsageDescription: Ignition uses the microphone only while you dictate a task or event.
+        INFOPLIST_KEY_UIBackgroundModes: audio
+    entitlements:
+      path: Sources/App/Ignition.entitlements
+      properties:
+        com.apple.developer.family-controls: true
+        com.apple.security.application-groups: [group.com.example.ignition]
+    dependencies:
+      - target: IgnitionWidgets
+        embed: true
+      - target: IgnitionDeviceMonitor
+        embed: true
+      - target: IgnitionShieldConfig
+        embed: true
+      - target: IgnitionShieldAction
+        embed: true
+    info:
+      path: Sources/App/Info.plist
+      properties:
+        CFBundleDisplayName: Ignition
+        UILaunchScreen: {}
+        NSSupportsLiveActivities: true
+        NSCalendarsFullAccessUsageDescription: Ignition shows events and lets you organize your day.
+        NSSpeechRecognitionUsageDescription: Ignition transcribes tasks and calendar events you speak.
+        NSMicrophoneUsageDescription: Ignition listens only during voice entry.
+        UIBackgroundModes: [audio]
+        CFBundleURLTypes:
+          - CFBundleURLSchemes: [ignition]
+  IgnitionWidgets:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/Widgets
+      - path: Sources/Shared/SharedConfiguration.swift
+      - path: Sources/Shared/LiveAttributes.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.ignition.widgets
+    entitlements:
+      path: Sources/Widgets/Widgets.entitlements
+    info:
+      path: Sources/Widgets/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+  IgnitionDeviceMonitor:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/Monitor
+      - path: Sources/Shared/SharedConfiguration.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.ignition.monitor
+    entitlements:
+      path: Sources/Monitor/Monitor.entitlements
+    info:
+      path: Sources/Monitor/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.deviceactivity.monitor-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).IgnitionDeviceMonitorExtension
+  IgnitionShieldConfig:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/ShieldConfig
+      - path: Sources/Shared/SharedConfiguration.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.ignition.shieldconfig
+    entitlements:
+      path: Sources/ShieldConfig/ShieldConfig.entitlements
+    info:
+      path: Sources/ShieldConfig/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettingsUI.shield-configuration-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).IgnitionShieldConfiguration
+  IgnitionShieldAction:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Sources/ShieldAction
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.example.ignition.shieldaction
+    entitlements:
+      path: Sources/ShieldAction/ShieldAction.entitlements
+    info:
+      path: Sources/ShieldAction/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.ManagedSettings.shield-action-service
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).IgnitionShieldAction

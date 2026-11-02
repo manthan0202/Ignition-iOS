@@ -1,0 +1,16 @@
+Ignition Now refinement — local verification
+Date: 2026-10-31
+PASS: Swift source syntax parse (all sources)
+PASS: Foundation session smoke
+PASS: 28 session stress assertions
+PASS: 109 focus-block checks
+PASS: block-session identity/persistence
+PASS: 4,000 Journey stop cluster stress
+PASS: 732 Journey viewport assertions
+PASS: 5,009 Now drawer projection/detent assertions
+PASS: 1,000 voice parser drafts
+PASS: 10,000 calendar sync rules
+PASS: Xcode project .pbxproj syntax validation
+PASS: Both Xcode schemes/source references check
+UNCHANGED: Sources/Widgets, FocusAndReturn, PlanView, session logic, signing configs
+UNVERIFIED: Xcode compilation, actual iPhone rendering, gesture smoothness, source artwork detail

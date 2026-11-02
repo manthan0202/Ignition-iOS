@@ -1,0 +1,26 @@
+# Ignition — real device acceptance tests (not yet executed)
+
+- [ ] Change all bundle IDs, App Group identifiers, add capabilities, and sign all five targets.
+- [ ] Xcode builds with no errors and launches on physical iPhone iOS 17.4+.
+- [ ] Cold launch into Now; no permission prompts until related feature is selected.
+- [ ] Start unnamed Quick Focus. A single persisted session starts with correct timestamp and creates exactly one Journey footprint.
+- [ ] Select a task, LOCK IN. Focus displays the correct title/next step and duration.
+- [ ] Start when Screen Time denied: truthful Timer only status, no crash.
+- [ ] Select apps in FamilyActivityPicker, approve authorization, LOCK IN. Confirm selected app shows real system shield.
+- [ ] Verify shield button labels/behavior on each supported iOS version; old OS falls back to Close.
+- [ ] Leave Ignition and lock the phone. Live Activity countdown visible on Lock Screen and compatible Dynamic Island; tappable deep link opens session.
+- [ ] Kill/reopen Ignition; timer state and task recovered; no duplicate Live Activities/footprints.
+- [ ] Specifically test a 2-minute protected Start Small session despite Apple's 15-minute minimum DeviceActivity monitoring window.
+- [ ] Timer reaches zero while app in background; selected apps are released no later than next OS-supported monitoring callback/device use and on app reconciliation.
+- [ ] Pause: timer stops; protection releases. Resume: same session returns, shield reapplied, countdown adjusts correctly.
+- [ ] Break: timer pauses, shields remain until explicitly resumed or original backstop expires. Break-completion alert arrives if notifications granted.
+- [ ] Emergency Exit clears shields immediately; no completion outcome inferred.
+- [ ] Close: none of Finished / Made Progress / Not Finished preselected; Skip records no outcome.
+- [ ] Finish changes task completion only after explicit Finished selection; session attempt footprint remains if unfinished or skipped.
+- [ ] Task drag to time slot, move, context resize; both Plan and Now update. Calendar sync when opted in behaves correctly.
+- [ ] Voice task or event entry requests permissions, transcribes, parses best-effort date, presents editable preview; denied permission has stable fallback.
+- [ ] Play Original Piano then lock phone; background audio continues. Test phone call/other app audio conflicts and headsets.
+- [ ] No duplicate completion/rescue reminders after starting or rescheduling.
+- [ ] Restore app after device reboot; sessions/restrictions reconcile safely.
+- [ ] Test denial/revocation of each permission; no crash and no false Protection on state.
+- [ ] VoiceOver, Reduce Motion, Dynamic Type, small screens, landscape, and DST transitions checked.

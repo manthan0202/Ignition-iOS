@@ -1,0 +1,15 @@
+Ignition.xcodeproj/project.pbxproj: OK
+Parsing all Swift sources...
+Compiling Foundation session tests...
+PASS: timestamp-based countdown, pause/resume, persistence, single footprint, reconciled elapsed time, honest outcome
+Running expanded deterministic stress suite...
+PASS: 28 assertions: expiry, background reload, skipped review, idempotency, pause, break, invalid transitions, emergency, corrupt data
+Testing Living Day viewport regression (empty day, pan, zoom, midnight)...
+PASS: 732 Journey viewport assertions: empty day, future/past, drag, midnight, zoom
+NOTICE: iOS APIs cannot be typechecked or run without Xcode and Apple SDK.
+Focus block checks passed: 109
+PASS: focus block session identity, restart, expiry, no false completion, legacy decode
+PASS: Journey geometry, bounded grouping, 4,000 dense events, no lost IDs
+PASS: voice parsing, time confirmation, 1,000 sequential drafts, no silent task saves
+PASS: 10,000 stable IDs; local edit precedence; cursor safety; calendar roles; all-day parsing
+PASS: project IDs, compiled Swift membership for both app schemes, artwork, Info.plist, widgets
