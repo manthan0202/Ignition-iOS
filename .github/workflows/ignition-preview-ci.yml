@@ -1,0 +1,52 @@
+
+name: Ignition Preview - Xcode Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-26
+    timeout-minutes: 35
+
+    steps:
+      - name: Get Ignition source code
+        uses: actions/checkout@v4
+
+      - name: Find Ignition project
+        shell: bash
+        run: |
+          if [ -d Ignition.xcodeproj ]; then
+            echo "APP_DIR=." >> "$GITHUB_ENV"
+          elif [ -d Ignition/Ignition.xcodeproj ]; then
+            echo "APP_DIR=Ignition" >> "$GITHUB_ENV"
+          else
+            echo "ERROR: Ignition.xcodeproj not found"
+            find . -name "*.xcodeproj"
+            exit 1
+          fi
+
+      - name: Run source tests
+        shell: bash
+        run: |
+          cd "$APP_DIR"
+          bash Scripts/verify_revision.sh
+
+      - name: Build Ignition for iPhone Simulator
+        shell: bash
+        run: |
+          cd "$APP_DIR"
+          xcodebuild \
+            -project Ignition.xcodeproj \
+            -scheme Ignition-Preview \
+            -configuration Debug \
+            -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            -derivedDataPath "$RUNNER_TEMP/ignition-build" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
